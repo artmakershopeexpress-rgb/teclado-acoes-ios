@@ -1,1 +1,52 @@
+name: Compilar Teclado Acoes iPhone
 
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compilar:
+    runs-on: macos-15
+    steps:
+      - name: Baixar arquivos do repositorio
+        uses: actions/checkout@v4
+
+      - name: Extrair codigo do teclado
+        run: |
+          set -euo pipefail
+          test -f TecladoAcoes_iOS_GitHubActions.zip
+          unzip -q TecladoAcoes_iOS_GitHubActions.zip
+          test -f TecladoAcoes_iOS/TecladoAcoes.xcodeproj/project.pbxproj
+
+      - name: Compilar aplicativo e extensao para iPhone
+        working-directory: TecladoAcoes_iOS
+        run: |
+          set -euo pipefail
+          xcodebuild -project TecladoAcoes.xcodeproj \
+            -scheme TecladoAcoes -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/.build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Criar IPA sem assinatura
+        working-directory: TecladoAcoes_iOS
+        run: |
+          set -euo pipefail
+          APP="$PWD/.build/DerivedData/Build/Products/Release-iphoneos/TecladoAcoes.app"
+          test -d "$APP/PlugIns/TecladoAcoesKeyboard.appex"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa"
+          zip -qry "$GITHUB_WORKSPACE/TecladoAcoes-sem-assinatura.ipa" Payload
+
+      - name: Disponibilizar IPA para download
+        uses: actions/upload-artifact@v4
+        with:
+          name: TecladoAcoes-IPA
+          path: TecladoAcoes-sem-assinatura.ipa
+          if-no-files-found: error
+          retention-days: 7
